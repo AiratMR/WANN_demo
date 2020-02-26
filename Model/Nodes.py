@@ -11,14 +11,10 @@ class BaseNode:
     Base node of neural network
     """
     def __init__(self, node_id: int,
-                 layer_id: int,
-                 weight: float,
-                 activation):
-        self._node_id = node_id
-        self._layer_id = layer_id
-        self._weight = weight
-        self._activation = activation
-        self._eval_result = None
+                 layer_id: int):
+        self.node_id = node_id
+        self.layer_id = layer_id
+        self.value = None
 
     @abstractmethod
     def evaluate_node_output(self):
@@ -27,32 +23,53 @@ class BaseNode:
 
 class InputNode(BaseNode):
     """
-    Input node of neural network
+    Node in input layer of neural network
     """
     def __init__(self, node_id: int,
                  layer_id: int,
-                 weight: float,
-                 activation,
                  input_value):
-        super().__init__(node_id, layer_id, weight, activation)
-        self._input_value = input_value
+        super().__init__(node_id, layer_id)
+        self.input_value = input_value
 
     def evaluate_node_output(self):
-        self._eval_result = self._activation(self._input_value)
+        self.value = self.input_value
 
 
 class HiddenNode(BaseNode):
     """
-    Node of neural network
+    Node in hidden layer of neural network
     """
 
     def __init__(self, node_id: int,
                  layer_id: int,
-                 weight: float,
                  activation):
-        super().__init__(node_id, layer_id, weight, activation)
-        self._connections = Connections()
+        super().__init__(node_id, layer_id)
+        self.activation = activation
+        self.prev_connections = Connections()
 
     def evaluate_node_output(self):
-        input_values = self._connections.
+        aggregation_value = 0
+        for connection in self.prev_connections.connections:
+            aggregation_value += connection.weight * connection.node.value
 
+        return self.activation(aggregation_value)
+
+
+class OutputNode(BaseNode):
+    """
+    Node in hidden layer of neural network
+    """
+
+    def __init__(self, node_id: int,
+                 layer_id: int,
+                 activation):
+        super().__init__(node_id, layer_id)
+        self.activation = activation
+        self.prev_connections = Connections()
+
+    def evaluate_node_output(self):
+        aggregation_value = 0
+        for connection in self.prev_connections.connections:
+            aggregation_value += connection.weight * connection.node.value
+
+        return self.activation(aggregation_value)

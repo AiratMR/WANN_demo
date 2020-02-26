@@ -9,8 +9,8 @@ class BaseLayer:
     Base layer
     """
     def __init__(self, layer_id: int, nodes: np.ndarray):
-        self._layer_id = layer_id
-        self._nodes = nodes
+        self.layer_id = layer_id
+        self.nodes = nodes
 
 
 class InputLayer(BaseLayer):
@@ -23,7 +23,7 @@ class InputLayer(BaseLayer):
 
 class HiddenLayer(BaseLayer):
     """
-    Input layer
+    Hidden layer
     """
     def __init__(self, layer_id: int, nodes: np.ndarray):
         super().__init__(layer_id, nodes)
@@ -31,7 +31,7 @@ class HiddenLayer(BaseLayer):
 
 class OutputLayer(BaseLayer):
     """
-    Input layer
+    Output layer
     """
     def __init__(self, layer_id: int, nodes: np.ndarray):
         super().__init__(layer_id, nodes)
