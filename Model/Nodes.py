@@ -10,8 +10,8 @@ class BaseNode:
     """
     Base node of neural network
     """
-    def __init__(self, node_id: int,
-                 layer_id: int):
+    def __init__(self, node_id,
+                 layer_id):
         self.node_id = node_id
         self.layer_id = layer_id
         self.value = None
@@ -25,9 +25,9 @@ class InputNode(BaseNode):
     """
     Node in input layer of neural network
     """
-    def __init__(self, node_id: int,
-                 layer_id: int,
-                 input_value):
+    def __init__(self, node_id,
+                 layer_id,
+                 input_value=None):
         super().__init__(node_id, layer_id)
         self.input_value = input_value
 
@@ -40,8 +40,8 @@ class HiddenNode(BaseNode):
     Node in hidden layer of neural network
     """
 
-    def __init__(self, node_id: int,
-                 layer_id: int,
+    def __init__(self, node_id,
+                 layer_id,
                  activation):
         super().__init__(node_id, layer_id)
         self.activation = activation
@@ -52,7 +52,7 @@ class HiddenNode(BaseNode):
         for connection in self.prev_connections.connections:
             aggregation_value += connection.weight * connection.node.value
 
-        return self.activation(aggregation_value)
+        self.value = self.activation(aggregation_value)
 
 
 class OutputNode(BaseNode):
@@ -60,8 +60,8 @@ class OutputNode(BaseNode):
     Node in hidden layer of neural network
     """
 
-    def __init__(self, node_id: int,
-                 layer_id: int,
+    def __init__(self, node_id,
+                 layer_id,
                  activation):
         super().__init__(node_id, layer_id)
         self.activation = activation
@@ -72,4 +72,4 @@ class OutputNode(BaseNode):
         for connection in self.prev_connections.connections:
             aggregation_value += connection.weight * connection.node.value
 
-        return self.activation(aggregation_value)
+        self.value = self.activation(aggregation_value)

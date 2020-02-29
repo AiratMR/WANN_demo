@@ -3,16 +3,14 @@ The module contains a definition of the class of connections in a neuron
 """
 import numpy as np
 
-from Model.Nodes import BaseNode
-
 
 class Connection:
     """
     Connection in a neuron
     """
-    def __init__(self, node: BaseNode):
+    def __init__(self, node, weight):
         self.node = node
-        self.weight = None
+        self.weight = weight
 
 
 class Connections:

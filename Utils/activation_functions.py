@@ -1,4 +1,5 @@
 import numpy as np
+import random
 from scipy.special import expit
 
 
@@ -55,4 +56,8 @@ FUNCTIONS = {
     'absolute': absolute
 }
 
+
+def get_random_function():
+    _, function = random.choice(list(FUNCTIONS.items()))
+    return function
 
