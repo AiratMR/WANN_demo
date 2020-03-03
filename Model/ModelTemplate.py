@@ -58,6 +58,7 @@ class WANNModel:
         @return: result -> 2d np.ndarray
         """
         result = []
+        # ToDo - сделать валидацию входных данных
         for data in input_data:
             for layer in self.layers:
                 for i, node in enumerate(layer.nodes):
