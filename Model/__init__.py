@@ -1,1 +1,1 @@
-from .ModelTemplate import ModelTemplate
+from .ModelTemplate import WANNModel

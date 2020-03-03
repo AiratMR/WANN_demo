@@ -1,4 +1,5 @@
 import uuid
+import numpy as np
 
 from .Layers import InputLayer, HiddenLayer, OutputLayer
 from .Nodes import InputNode, HiddenNode, OutputNode
@@ -6,7 +7,7 @@ from .Connections import Connection
 from Utils import FUNCTIONS, get_random_function
 
 
-class ModelTemplate:
+class WANNModel:
     def __init__(self, layers, weight):
         self.layers = layers
         self.weight = weight
@@ -40,8 +41,8 @@ class ModelTemplate:
             ))
 
         # ToDo - генерировать изначальный вес
-        model = ModelTemplate(layers=[input_layer, output_layer],
-                              weight=1)
+        model = WANNModel(layers=[input_layer, output_layer],
+                          weight=1)
 
         for node in output_layer.nodes:
             connection = Connection(node=input_layer.get_random_node(),
@@ -49,3 +50,25 @@ class ModelTemplate:
             node.prev_connections.add_connection(connection)
 
         return model
+
+    def evaluate_model(self, input_data):
+        """
+        Evaluate model by input data
+        @param input_data: 2d np.ndarray
+        @return: result -> 2d np.ndarray
+        """
+        result = []
+        for data in input_data:
+            for layer in self.layers:
+                for i, node in enumerate(layer.nodes):
+                    # init input data values in input layer
+                    if isinstance(layer, InputLayer):
+                        node.input_value = data[i]
+
+                    node.evaluate_node_output()
+
+                # create one result
+                if isinstance(layer, OutputLayer):
+                    result.append([res.value for res in layer.nodes])
+
+        return np.array(result)
