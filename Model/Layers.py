@@ -10,7 +10,9 @@ class BaseLayer:
     """
     Base layer
     """
-    def __init__(self, layer_id, nodes=[]):
+    def __init__(self, layer_id, nodes=None):
+        if nodes is None:
+            nodes = []
         self.layer_id = layer_id
         self.nodes = nodes
 
@@ -25,21 +27,27 @@ class InputLayer(BaseLayer):
     """
     Input layer
     """
-    def __init__(self, layer_id, nodes=[]):
+    def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
+        if nodes is None:
+            nodes = []
 
 
 class HiddenLayer(BaseLayer):
     """
     Hidden layer
     """
-    def __init__(self, layer_id, nodes=[]):
+    def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
+        if nodes is None:
+            nodes = []
 
 
 class OutputLayer(BaseLayer):
     """
     Output layer
     """
-    def __init__(self, layer_id, nodes=[]):
+    def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
+        if nodes is None:
+            nodes = []

@@ -4,19 +4,20 @@ import numpy as np
 from .Layers import InputLayer, HiddenLayer, OutputLayer
 from .Nodes import InputNode, HiddenNode, OutputNode
 from .Connections import Connection
-from Utils import FUNCTIONS, get_random_function
+from Utils import get_random_function
 
 
 class WANNModel:
-    def __init__(self, layers, weight):
+    def __init__(self, model_id, layers, weight):
+        self.model_id = model_id
         self.layers = layers
         self.weight = weight
 
-    @staticmethod
-    def create_model(input_data):
+    @classmethod
+    def create_model(cls, train_data):
         """
         Generate model by input data
-        @param input_data:
+        @param train_data:
                {
                   'x': 1d array,
                   'y': 1d array
@@ -24,26 +25,28 @@ class WANNModel:
         @return: WANN model
         """
         # input layer build
-        input_layer = InputLayer(layer_id=uuid.uuid4())
-        for _ in input_data['x']:
+        input_layer = InputLayer(layer_id=str(uuid.uuid4()))
+        for _ in train_data['x']:
             input_layer.add_node(node=InputNode(
-                node_id=uuid.uuid4(),
+                node_id=str(uuid.uuid4()),
                 layer_id=input_layer.layer_id
             ))
 
         # output layer build
-        output_layer = OutputLayer(layer_id=uuid.uuid4())
-        for _ in input_data['y']:
+        output_layer = OutputLayer(layer_id=str(uuid.uuid4()))
+        for _ in train_data['y']:
             output_layer.add_node(node=OutputNode(
-                node_id=uuid.uuid4(),
+                node_id=str(uuid.uuid4()),
                 layer_id=output_layer.layer_id,
                 activation=get_random_function()
             ))
 
         # ToDo - генерировать изначальный вес
-        model = WANNModel(layers=[input_layer, output_layer],
+        model = WANNModel(model_id=str(uuid.uuid4()),
+                          layers=[input_layer, output_layer],
                           weight=1)
 
+        # add connections
         for node in output_layer.nodes:
             connection = Connection(node=input_layer.get_random_node(),
                                     weight=model.weight)
@@ -73,3 +76,12 @@ class WANNModel:
                     result.append([res.value for res in layer.nodes])
 
         return np.array(result)
+
+    def set_weight(self, value):
+        self.weight = value
+
+        for layer in self.layers:
+            for node in layer.nodes:
+                if not isinstance(layer, InputLayer):
+                    for conn in node.prev_connections.connections:
+                        conn.weight = value

@@ -1,13 +1,16 @@
 import numpy as np
 
-from Model import WANNModel
+from ModelGenerator import generate_wann_model
 
-model = WANNModel.create_model({
-    'x': [1, 2, 3],
-    'y': [1, 2]
-})
+# model = WANNModel.create_model({
+#     'x': [1, 2, 3],
+#     'y': [1, 2]
+# })
 
-input_data = np.array([[1, 2, 3], [1, 2, 3], [1, 2, 3]])
-result = model.evaluate_model(input_data)
+input_data = np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0], [1.0, 2.0, 3.0]])
+output_data = np.array([[1.0, 2.0], [1.0, 2.0], [1.0, 2.0]])
+# result = model.evaluate_model(input_data)
+
+result = generate_wann_model(input_data, output_data)
 
 a = 1

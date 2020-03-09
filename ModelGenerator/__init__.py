@@ -1,0 +1,1 @@
+from .WANNModelGenerator import generate_wann_model

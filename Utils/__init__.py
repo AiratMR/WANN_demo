@@ -1,1 +1,1 @@
-from .activation_functions import FUNCTIONS, get_random_function
+from .activation_functions import get_random_function
