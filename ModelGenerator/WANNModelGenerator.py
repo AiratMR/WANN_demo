@@ -1,4 +1,4 @@
-from sklearn.preprocessing import minmax_scale
+import numpy as np
 from sklearn.metrics import mean_squared_error
 
 from typing import List
@@ -8,8 +8,8 @@ EVAL_WEIGHTS = [-2.0, -1.0, 0.1, 1.0, 2.0]
 
 
 def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen_num: int = 5) -> WANNModel:
-    x_scaled = minmax_scale(x_train)
-    y_scaled = minmax_scale(y_train)
+    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
+    y_scaled = (y_train - np.min(y_train)) / np.ptp(y_train)
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
     result = _order_models_by_error(x_scaled, y_scaled, generation)
     return generation
