@@ -11,7 +11,7 @@ def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen
     x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
     y_scaled = (y_train - np.min(y_train)) / np.ptp(y_train)
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
-    result = _order_models_by_error(x_scaled, y_scaled, generation)
+    result = _sort_models_by_error(x_scaled, y_scaled, generation)
     return generation
 
 
@@ -22,7 +22,7 @@ def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
     return generation
 
 
-def _order_models_by_error(x_train, y_train, generation):
+def _sort_models_by_error(x_train, y_train, generation):
     model_result = {}
     for model in generation:
         errors_sum = 0
@@ -32,4 +32,5 @@ def _order_models_by_error(x_train, y_train, generation):
             error = mean_squared_error(y_train, eval_result)
             errors_sum += error
         model_result[model.model_id] = errors_sum
-    return model_result
+
+    return sorted((value, key) for (key, value) in model_result.items())
