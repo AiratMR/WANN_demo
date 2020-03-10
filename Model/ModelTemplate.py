@@ -85,3 +85,13 @@ class WANNModel:
                 if not isinstance(layer, InputLayer):
                     for conn in node.prev_connections.connections:
                         conn.weight = value
+
+    def get_all_nodes(self, with_input: bool = False):
+        nodes = []
+        for layer in self.layers:
+            if not with_input:
+                if isinstance(layer, InputLayer):
+                    continue
+            for node in layer.nodes:
+                nodes.append(node)
+        return nodes
