@@ -20,7 +20,7 @@ class BaseLayer:
         self.nodes.append(node)
 
     def get_random_node(self):
-        return self.nodes[random.randint(0, len(self.nodes) - 1)]
+        return random.choice(self.nodes)
 
 
 class InputLayer(BaseLayer):
