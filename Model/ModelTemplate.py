@@ -1,5 +1,8 @@
 import uuid
 import numpy as np
+from copy import deepcopy
+from scipy.optimize import minimize
+from sklearn.metrics import mean_squared_error
 
 from .Layers import InputLayer, HiddenLayer, OutputLayer
 from .Nodes import InputNode, HiddenNode, OutputNode
@@ -95,3 +98,26 @@ class WANNModel:
             for node in layer.nodes:
                 nodes.append(node)
         return nodes
+
+    def get_copy(self):
+        copy_obj = deepcopy(self)
+        copy_obj.model_id = str(uuid.uuid4())
+        return copy_obj
+
+    def train_weight(self, x_train, y_train):
+        x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
+        y_min, y_ptp = np.min(y_train), np.ptp(y_train)
+
+        def y_scaled(y):
+            return y * y_ptp + y_min
+
+        def obj_func(x):
+            self.weight = x[0]
+            self.set_weight(x[0])
+            eval_result = self.evaluate_model(x_scaled)
+            print("weight={0}".format(self.weight))
+            print(y_scaled(eval_result))
+            return mean_squared_error(y_train, y_scaled(eval_result))
+
+        res = minimize(obj_func, np.array([1]), method='Nelder-Mead')
+        self.weight = res.x[0]

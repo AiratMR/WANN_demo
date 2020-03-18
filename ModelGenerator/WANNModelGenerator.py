@@ -12,20 +12,39 @@ from Model.Connections import Connection
 from Utils import get_random_function
 
 EVAL_WEIGHTS = [-2.0, -1.0, 0.1, 1.0, 2.0]
+WINNER_COUNT = 3
 
 
-def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen_num: int = 5) -> WANNModel:
-    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-    y_scaled = (y_train - np.min(y_train)) / np.ptp(y_train)
+def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen_num: int = 9) -> List[WANNModel]:
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
-    result = _sort_models_by_error(x_scaled, y_scaled, generation)
 
-    winner_model = next(model for model in generation if model.model_id == result[0][1])
-    _add_new_node(winner_model)
-    res = winner_model.evaluate_model(x_scaled)
-    copy_model = deepcopy(winner_model)
+    for iteration in range(niter):
+        iter_result = _sort_models_by_error(x_train, y_train, generation)
 
-    return generation
+        print("Iteration #{0}:".format(iteration))
+        for i, result in enumerate(iter_result):
+            print("     Model #{0} - mean squared error {1}".format(i, result[0]))
+            if result[0] < tol:
+                return generation[:WINNER_COUNT]
+
+        winner_models = []
+        for i in range(WINNER_COUNT):
+            winner_models.append(next(model for model in generation if model.model_id == iter_result[i][1]))
+
+        for i in range(WINNER_COUNT):
+            for j in range(WINNER_COUNT - 1):
+                winner_models.append(winner_models[i].get_copy())
+            if len(winner_models) == gen_num:
+                break
+
+        for i, model in enumerate(winner_models):
+            modification = MODIFICATION_LIST[i % WINNER_COUNT]
+            print(modification.__name__)
+            modification(model)
+
+        generation = winner_models
+
+    return generation[:WINNER_COUNT]
 
 
 def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
@@ -36,13 +55,19 @@ def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
 
 
 def _sort_models_by_error(x_train, y_train, generation):
+    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
+    y_min, y_ptp = np.min(y_train), np.ptp(y_train)
+
+    def y_scaled(y):
+        return y * y_ptp + y_min
+
     model_result = {}
     for model in generation:
         errors_sum = 0
         for i, value in enumerate(EVAL_WEIGHTS):
             model.set_weight(value)
-            eval_result = model.evaluate_model(x_train)
-            error = mean_squared_error(y_train, eval_result)
+            eval_result = model.evaluate_model(x_scaled)
+            error = mean_squared_error(y_train, y_scaled(eval_result))
             errors_sum += error
         model_result[model.model_id] = errors_sum
 
@@ -114,3 +139,8 @@ def _add_new_node(model):
         exist_layer.add_node(new_node)
 
         node.prev_connections.edit_connection(prev_node, new_node)
+
+
+MODIFICATION_LIST = [_change_activation_function,
+                     _add_connection,
+                     _add_new_node]
