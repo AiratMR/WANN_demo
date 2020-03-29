@@ -4,8 +4,8 @@ from copy import deepcopy
 from scipy.optimize import minimize
 from sklearn.metrics import mean_squared_error
 
-from .Layers import InputLayer, HiddenLayer, OutputLayer
-from .Nodes import InputNode, HiddenNode, OutputNode
+from .Layers import InputLayer, OutputLayer
+from .Nodes import InputNode, OutputNode
 from .Connections import Connection
 from Utils import get_random_function
 
@@ -44,7 +44,6 @@ class WANNModel:
                 activation=get_random_function()
             ))
 
-        # ToDo - генерировать изначальный вес
         model = WANNModel(model_id=str(uuid.uuid4()),
                           layers=[input_layer, output_layer],
                           weight=1)
@@ -81,6 +80,10 @@ class WANNModel:
         return np.array(result)
 
     def set_weight(self, value):
+        """
+        Set new value of weight to all nodes in model
+        :param value: new value -> float
+        """
         self.weight = value
 
         for layer in self.layers:
@@ -90,6 +93,11 @@ class WANNModel:
                         conn.weight = value
 
     def get_all_nodes(self, with_input: bool = False):
+        """
+        Get list of all nodes
+        :param with_input: True - get nodes from input layer too -> bool
+        :return: list of nodes -> List[BaseNode]
+        """
         nodes = []
         for layer in self.layers:
             if not with_input:
@@ -100,11 +108,20 @@ class WANNModel:
         return nodes
 
     def get_copy(self):
+        """
+        Return copy of model
+        :return: copy of model -> WANNModel
+        """
         copy_obj = deepcopy(self)
         copy_obj.model_id = str(uuid.uuid4())
         return copy_obj
 
     def train_weight(self, x_train, y_train):
+        """
+        Find the optimal value of weight
+        :param x_train: input values
+        :param y_train: output values
+        """
         x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
         y_min, y_ptp = np.min(y_train), np.ptp(y_train)
 

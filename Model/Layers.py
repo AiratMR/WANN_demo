@@ -16,10 +16,18 @@ class BaseLayer:
         self.layer_id = layer_id
         self.nodes = nodes
 
-    def add_node(self, node: BaseNode):
+    def add_node(self, node):
+        """
+        Add node to list of nodes
+        :param node: add node -> BaseNode
+        """
         self.nodes.append(node)
 
     def get_random_node(self):
+        """
+        Return random node from list of nodes
+        :return: random node -> BaseNode
+        """
         return random.choice(self.nodes)
 
 
@@ -29,8 +37,6 @@ class InputLayer(BaseLayer):
     """
     def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
-        if nodes is None:
-            nodes = []
 
 
 class HiddenLayer(BaseLayer):
@@ -39,8 +45,6 @@ class HiddenLayer(BaseLayer):
     """
     def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
-        if nodes is None:
-            nodes = []
 
 
 class OutputLayer(BaseLayer):
@@ -49,5 +53,4 @@ class OutputLayer(BaseLayer):
     """
     def __init__(self, layer_id, nodes=None):
         super().__init__(layer_id, nodes)
-        if nodes is None:
-            nodes = []
+

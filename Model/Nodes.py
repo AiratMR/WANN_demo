@@ -18,6 +18,9 @@ class BaseNode:
 
     @abstractmethod
     def evaluate_node_output(self):
+        """
+        Evaluate the output of node
+        """
         pass
 
 

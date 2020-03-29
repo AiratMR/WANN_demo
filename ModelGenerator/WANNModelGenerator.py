@@ -2,20 +2,36 @@ import numpy as np
 import uuid
 from sklearn.metrics import mean_squared_error
 import random
-from copy import deepcopy
 
 from typing import List
-from Model import WANNModel
+from Model.WANNModel import WANNModel
 from Model.Nodes import HiddenNode
 from Model.Layers import HiddenLayer
 from Model.Connections import Connection
 from Utils import get_random_function
 
 EVAL_WEIGHTS = [-2.0, -1.0, 0.1, 1.0, 2.0]
-WINNER_COUNT = 3
 
 
-def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen_num: int = 9) -> List[WANNModel]:
+def generate_wann_model(x_train, y_train,
+                        tol: float = 0.1,
+                        niter: int = 50,
+                        gen_num: int = 9,
+                        nwinners: int = 3) -> List[WANNModel]:
+    """
+    Generate the WANN model by train data
+    :param x_train: input train values -> 2d np.ndarray
+    :param y_train: output train values -> 2d np.ndarray
+    :param tol: model accuracy -> float
+    :param niter: number of iterations -> int
+    :param gen_num: number of models in generation -> int
+    :param nwinners: number of winners -> int
+    :return: list of winners -> List[WANNModel]
+    """
+
+    assert x_train.shape == y_train.shape, "'x_train' shape not equal of 'y_train shape"
+    assert gen_num > nwinners, "Value of 'gen_num' must be greater than 'nwinners'"
+
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
 
     for iteration in range(niter):
@@ -25,29 +41,39 @@ def generate_wann_model(x_train, y_train, tol: float = 0.1, niter: int = 50, gen
         for i, result in enumerate(iter_result):
             print("     Model #{0} - mean squared error {1}".format(i, result[0]))
             if result[0] < tol:
-                return generation[:WINNER_COUNT]
+                return generation[:nwinners]
 
         winner_models = []
-        for i in range(WINNER_COUNT):
+        for i in range(nwinners):
             winner_models.append(next(model for model in generation if model.model_id == iter_result[i][1]))
 
-        for i in range(WINNER_COUNT):
-            for j in range(WINNER_COUNT - 1):
+        for i in range(nwinners):
+            for j in range(nwinners - 1):
                 winner_models.append(winner_models[i].get_copy())
             if len(winner_models) == gen_num:
                 break
 
         for i, model in enumerate(winner_models):
-            modification = MODIFICATION_LIST[i % WINNER_COUNT]
+            modification = MODIFICATION_LIST[i % nwinners]
             print(modification.__name__)
             modification(model)
 
         generation = winner_models
 
-    return generation[:WINNER_COUNT]
+    return generation[:nwinners]
 
 
 def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
+    """
+    Initialization of first generation of models
+    :param train_data: dict with structure
+    {
+        'x': 1d np.ndarray
+        'y': 1d np.ndarray
+    }
+    :param gen_num: number of models in generation -> int
+    :return: first generation list -> List[WANNModel]
+    """
     generation = []
     for _ in range(gen_num):
         generation.append(WANNModel.create_model(train_data))
@@ -55,6 +81,13 @@ def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
 
 
 def _sort_models_by_error(x_train, y_train, generation):
+    """
+    Evaluate and sort models by error to increase
+    :param x_train: input values -> 2d np.ndarray
+    :param y_train: output values -> 2d np.ndarray
+    :param generation: list with first generation of models -> List[WANNModel]
+    :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
+    """
     x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
     y_min, y_ptp = np.min(y_train), np.ptp(y_train)
 
@@ -75,12 +108,20 @@ def _sort_models_by_error(x_train, y_train, generation):
 
 
 def _change_activation_function(model):
+    """
+    Change сurrent activation function of random node in model
+    :param model: WANN model -> WANNModel
+    """
     nodes = model.get_all_nodes()
     node = random.choice(nodes)
     node.activation = get_random_function()
 
 
 def _add_connection(model):
+    """
+    Add connection between random nodes
+    :param model: WANN model -> WANNModel
+    """
     all_nodes = model.get_all_nodes(with_input=True)
     first_rand_node = random.choice(all_nodes)
 
@@ -104,6 +145,13 @@ def _add_connection(model):
 
 
 def _get_random_layer_order(layer_id1, layer_id2, model):
+    """
+    Get order of two random layers
+    :param layer_id1: first layer guid -> str
+    :param layer_id2: second layer guid -> str
+    :param model: WANN model -> WANNModel
+    :return: List[str]
+    """
     ordered_layers_id = []
     for layer in model.layers:
         if layer.layer_id == layer_id1 or layer.layer_id == layer_id2:
@@ -112,6 +160,10 @@ def _get_random_layer_order(layer_id1, layer_id2, model):
 
 
 def _add_new_node(model):
+    """
+    Add new node between two random nodes
+    :param model: WANN model -> WANNModel
+    """
     all_nodes = model.get_all_nodes()
     node = random.choice(all_nodes)
     prev_node = random.choice([connection.node for connection in node.prev_connections.connections])
@@ -129,7 +181,7 @@ def _add_new_node(model):
 
         new_layer.add_node(new_node)
 
-        node.prev_connections.edit_connection(prev_node, new_node)
+        node.prev_connections.update_connection(prev_node, new_node)
     else:
         exist_layer = model.layers[first_layer_index + 1]
 
@@ -138,9 +190,10 @@ def _add_new_node(model):
 
         exist_layer.add_node(new_node)
 
-        node.prev_connections.edit_connection(prev_node, new_node)
+        node.prev_connections.update_connection(prev_node, new_node)
 
 
+# List of model modifications
 MODIFICATION_LIST = [_change_activation_function,
                      _add_connection,
                      _add_new_node]
