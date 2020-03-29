@@ -13,6 +13,7 @@ from Utils import get_random_function
 EVAL_WEIGHTS = [-2.0, -1.0, 0.1, 1.0, 2.0]
 
 
+# ToDo - оформить все это в класс
 def generate_wann_model(x_train, y_train,
                         tol: float = 0.1,
                         niter: int = 50,
