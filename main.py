@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from ModelGenerator import generate_wann_model
 
@@ -7,11 +8,14 @@ from ModelGenerator import generate_wann_model
 #     'y': [1, 2]
 # })
 
-input_data = np.array([[1, 5, 8, 17], [1, 5, 8, 17], [1, 5, 8, 17]])
-output_data = np.array([[11.0, 2.0], [11.0, 2.0], [11.0, 2.0]])
+data = pd.read_excel('data.xlsx')
+data = np.array(data)
+
+input_data = data[:, :1]
+output_data = data[:, 1:]
 # result = model.evaluate_model(input_data)
 
-result = generate_wann_model(input_data, output_data, tol=0.01)
+result = generate_wann_model(input_data, output_data, tol=0.0001)
 model = result[0]
 model.train_weight(input_data, output_data)
 

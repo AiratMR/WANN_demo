@@ -34,7 +34,11 @@ class Connections:
         :param old_node: node to be updated -> BaseNode
         :param new_node: new node -> BaseNode
         """
-        connection = next(conn for conn in self.connections if conn.node.node_id == old_node.node_id)
+        try:
+            connection = next(conn for conn in self.connections if conn.node.node_id == old_node.node_id)
+        except StopIteration:
+            self.add_connection(Connection(new_node, self.connections[0].weight))
+            return
         connection.node = new_node
 
     def is_valid_connection(self, connection) -> bool:

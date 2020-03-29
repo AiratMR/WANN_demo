@@ -30,7 +30,7 @@ def generate_wann_model(x_train, y_train,
     :return: list of winners -> List[WANNModel]
     """
 
-    assert x_train.shape == y_train.shape, "'x_train' shape not equal of 'y_train shape"
+    assert x_train.shape[0] == y_train.shape[0], "'x_train' shape not equal of 'y_train shape"
     assert gen_num > nwinners, "Value of 'gen_num' must be greater than 'nwinners'"
 
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
@@ -55,7 +55,7 @@ def generate_wann_model(x_train, y_train,
                 break
 
         for i, model in enumerate(winner_models):
-            modification = MODIFICATION_LIST[i % nwinners]
+            modification = random.choice(MODIFICATION_LIST)
             print(modification.__name__)
             modification(model)
 
@@ -165,9 +165,22 @@ def _add_new_node(model):
     Add new node between two random nodes
     :param model: WANN model -> WANNModel
     """
-    all_nodes = model.get_all_nodes()
-    node = random.choice(all_nodes)
-    prev_node = random.choice([connection.node for connection in node.prev_connections.connections])
+    all_nodes = model.get_all_nodes(with_input=True)
+    first_rand_node = random.choice(all_nodes)
+
+    candidate_layers = [layer for layer in model.layers if layer.layer_id != first_rand_node.layer_id]
+    second_rand_node = random.choice([node for layer in candidate_layers for node in layer.nodes])
+
+    layer_id_to_node_map = {
+        first_rand_node.layer_id: first_rand_node,
+        second_rand_node.layer_id: second_rand_node
+    }
+
+    first_layer_id, second_layer_id = _get_random_layer_order(first_rand_node.layer_id, second_rand_node.layer_id,
+                                                              model)
+
+    prev_node = layer_id_to_node_map[first_layer_id]
+    node = layer_id_to_node_map[second_layer_id]
 
     first_layer_index = next(i for i, layer in enumerate(model.layers) if layer.layer_id == prev_node.layer_id)
     second_layer_index = next(i for i, layer in enumerate(model.layers) if layer.layer_id == node.layer_id)

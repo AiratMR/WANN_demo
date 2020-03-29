@@ -1,7 +1,7 @@
 import uuid
 import numpy as np
 from copy import deepcopy
-from scipy.optimize import minimize
+from scipy.optimize import dual_annealing
 from sklearn.metrics import mean_squared_error
 
 from .Layers import InputLayer, OutputLayer
@@ -63,7 +63,7 @@ class WANNModel:
         @return: result -> 2d np.ndarray
         """
         result = []
-        # ToDo - сделать валидацию входных данных
+
         for data in input_data:
             for layer in self.layers:
                 for i, node in enumerate(layer.nodes):
@@ -136,5 +136,5 @@ class WANNModel:
             print(y_scaled(eval_result))
             return mean_squared_error(y_train, y_scaled(eval_result))
 
-        res = minimize(obj_func, np.array([1]), method='Nelder-Mead')
+        res = dual_annealing(obj_func, np.array([(-2, 2)]))
         self.weight = res.x[0]
