@@ -1,11 +1,12 @@
+import random
 import uuid
 import numpy as np
 from copy import deepcopy
 from scipy.optimize import dual_annealing
 from sklearn.metrics import mean_squared_error
 
-from .Layers import InputLayer, OutputLayer
-from .Nodes import InputNode, OutputNode
+from .Layers import InputLayer, HiddenLayer, OutputLayer
+from .Nodes import InputNode, HiddenNode, OutputNode
 from .Connections import Connection
 from Utils import get_random_function
 
@@ -15,6 +16,9 @@ class WANNModel:
         self.model_id = model_id
         self.layers = layers
         self.weight = weight
+        self.nodes_count = 0
+        self.connections_count = 0
+        self.nodes = []
 
     @classmethod
     def create_model(cls, train_data):
@@ -27,32 +31,45 @@ class WANNModel:
                }
         @return: WANN model
         """
+        nodes_count = 0
+        connections_count = 0
+        nodes = []
         # input layer build
         input_layer = InputLayer(layer_id=str(uuid.uuid4()))
         for _ in train_data['x']:
-            input_layer.add_node(node=InputNode(
+            node = InputNode(
                 node_id=str(uuid.uuid4()),
                 layer_id=input_layer.layer_id
-            ))
+            )
+            input_layer.add_node(node=node)
+            nodes.append(node)
+            nodes_count += 1
 
         # output layer build
         output_layer = OutputLayer(layer_id=str(uuid.uuid4()))
         for _ in train_data['y']:
-            output_layer.add_node(node=OutputNode(
+            node = OutputNode(
                 node_id=str(uuid.uuid4()),
                 layer_id=output_layer.layer_id,
                 activation=get_random_function()
-            ))
+            )
+            output_layer.add_node(node=node)
+            nodes.append(node)
+            nodes_count += 1
 
         model = WANNModel(model_id=str(uuid.uuid4()),
                           layers=[input_layer, output_layer],
                           weight=1)
+        model.nodes_count = nodes_count
+        model.nodes = nodes
 
         # add connections
         for node in output_layer.nodes:
             connection = Connection(node=input_layer.get_random_node(),
                                     weight=model.weight)
             node.prev_connections.add_connection(connection)
+            connections_count += 1
+        model.connections_count = connections_count
 
         return model
 
@@ -98,14 +115,9 @@ class WANNModel:
         :param with_input: True - get nodes from input layer too -> bool
         :return: list of nodes -> List[BaseNode]
         """
-        nodes = []
-        for layer in self.layers:
-            if not with_input:
-                if isinstance(layer, InputLayer):
-                    continue
-            for node in layer.nodes:
-                nodes.append(node)
-        return nodes
+        if with_input:
+            return self.nodes
+        return [node for node in self.nodes if not isinstance(node, InputNode)]
 
     def get_copy(self):
         """
@@ -138,3 +150,103 @@ class WANNModel:
 
         res = dual_annealing(obj_func, np.array([(-2, 2)]))
         self.weight = res.x[0]
+
+    def random_mutation(self):
+        """
+        Random mutation of model
+        """
+
+        mutation_list = [
+            self._change_activation_function,
+            self._add_connection,
+            self._add_new_node
+        ]
+
+        mutation = random.choice(mutation_list)
+        mutation()
+        print("""Random mutation - {0};
+                 connections count = {1}
+                 nodes count = {2}""".format(mutation.__name__, self.connections_count, self.nodes_count))
+
+    def _change_activation_function(self):
+        """
+        Change сurrent activation function of random node in model
+        """
+        nodes = self.get_all_nodes()
+        node = random.choice(nodes)
+        node.activation = get_random_function()
+
+    def _get_random_layer_order(self, layer_id1, layer_id2):
+        """
+        Get order of two random layers
+        :param layer_id1: first layer guid -> str
+        :param layer_id2: second layer guid -> str
+        :return: List[str]
+        """
+        ordered_layers_id = []
+        for layer in self.layers:
+            if layer.layer_id == layer_id1 or layer.layer_id == layer_id2:
+                ordered_layers_id.append(layer.layer_id)
+        return ordered_layers_id
+
+    def _add_connection(self):
+        """
+        Add connection between random nodes
+        """
+        all_nodes = self.get_all_nodes(with_input=True)
+        first_rand_node = random.choice(all_nodes)
+
+        candidate_layers = [layer for layer in self.layers if layer.layer_id != first_rand_node.layer_id]
+        second_rand_node = random.choice([node for layer in candidate_layers for node in layer.nodes])
+
+        layer_id_to_node_map = {
+            first_rand_node.layer_id: first_rand_node,
+            second_rand_node.layer_id: second_rand_node
+        }
+
+        first_layer_id, second_layer_id = self._get_random_layer_order(first_rand_node.layer_id,
+                                                                       second_rand_node.layer_id)
+
+        prev_node = layer_id_to_node_map[first_layer_id]
+        node = layer_id_to_node_map[second_layer_id]
+
+        connection = Connection(prev_node, self.weight)
+        if node.prev_connections.is_valid_connection(connection):
+            node.prev_connections.add_connection(connection)
+            self.connections_count += 1
+
+    def _add_new_node(self):
+        """
+        Add new node between two random nodes
+        """
+        all_nodes = self.get_all_nodes()
+        node = random.choice(all_nodes)
+        prev_node = random.choice([connection.node for connection in node.prev_connections.connections])
+
+        first_layer_index = next(i for i, layer in enumerate(self.layers) if layer.layer_id == prev_node.layer_id)
+        second_layer_index = next(i for i, layer in enumerate(self.layers) if layer.layer_id == node.layer_id)
+        layers_between = self.layers[first_layer_index:second_layer_index]
+
+        if len(layers_between) == 1:
+            self.layers.insert(first_layer_index + 1, HiddenLayer(str(uuid.uuid4())))
+            new_layer = self.layers[first_layer_index + 1]
+
+            new_node = HiddenNode(str(uuid.uuid4()), new_layer.layer_id, get_random_function())
+            new_node.prev_connections.add_connection(Connection(prev_node, self.weight))
+
+            new_layer.add_node(new_node)
+
+            node.prev_connections.update_connection(prev_node, new_node)
+            self.nodes.append(new_node)
+        else:
+            exist_layer = self.layers[first_layer_index + 1]
+
+            new_node = HiddenNode(str(uuid.uuid4()), exist_layer.layer_id, get_random_function())
+            new_node.prev_connections.add_connection(Connection(prev_node, self.weight))
+
+            exist_layer.add_node(new_node)
+
+            node.prev_connections.update_connection(prev_node, new_node)
+            self.nodes.append(new_node)
+        self.nodes_count += 1
+        self.connections_count += 1

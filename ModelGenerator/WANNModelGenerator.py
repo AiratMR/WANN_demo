@@ -1,18 +1,12 @@
+import math
 import numpy as np
-import uuid
 from sklearn.metrics import mean_squared_error
-import random
 
 from typing import List
 from Model.WANNModel import WANNModel
-from Model.Nodes import HiddenNode
-from Model.Layers import HiddenLayer
-from Model.Connections import Connection
-from Utils import get_random_function
 
 EVAL_WEIGHTS = [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0]
 
-# ToDo - оформить все это в класс
 """
 ToDo - реализовать ранжирование по: 1) В 80% по средней ошибке и количеству нейронов (связей);
                                     2) В 20% по средней ошибке и ошибке одного лучшего веса;
@@ -27,8 +21,7 @@ ToDo - реализовать ранжирование по: 1) В 80% по ср
 def generate_wann_model(x_train, y_train,
                         tol: float = 0.1,
                         niter: int = 50,
-                        gen_num: int = 9,
-                        nwinners: int = 3) -> List[WANNModel]:
+                        gen_num: int = 9) -> WANNModel:
     """
     Generate the WANN model by train data
     :param x_train: input train values -> 2d np.ndarray
@@ -36,42 +29,53 @@ def generate_wann_model(x_train, y_train,
     :param tol: model accuracy -> float
     :param niter: number of iterations -> int
     :param gen_num: number of models in generation -> int
-    :param nwinners: number of winners -> int
-    :return: list of winners -> List[WANNModel]
+    :return: winner -> WANNModel
     """
 
     assert x_train.shape[0] == y_train.shape[0], "'x_train' shape not equal of 'y_train shape"
-    assert gen_num > nwinners, "Value of 'gen_num' must be greater than 'nwinners'"
-
+    winners_num = math.ceil(gen_num / 2)
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
 
     for iteration in range(niter):
-        iter_result = _sort_models_by_error(x_train, y_train, generation)
+        models = _get_models_avg_nodes_count(x_train, y_train, generation)
+        fronts = _non_dominated_sorting(models)
 
         print("Iteration #{0}:".format(iteration))
-        for i, result in enumerate(iter_result):
-            print("     Model #{0} - mean squared error {1}".format(i, result[0]))
-            if result[0] < tol:
-                return generation[:nwinners]
+        for front in fronts:
+            for i in front:
+                print("     Model #{0} - avg_mean squared error {1}".format(models[i][0], models[i][1]))
+                if models[i][1] < tol:
+                    return next(winner for winner in generation if winner.model_id == models[i][0])
 
-        winner_models = []
-        for i in range(nwinners):
-            winner_models.append(next(model for model in generation if model.model_id == iter_result[i][1]))
+        new_generation = []
+        while len(new_generation) != winners_num:
+            for front in fronts:
+                if len(new_generation) + len(front) < winners_num:
+                    for i in front:
+                        new_generation.append(next(model for model in generation if model.model_id == models[i][0]))
+                else:
+                    crowding_distance = _crowding_distance(models, front)
+                    distance_to_model = {models[index][0]: crowding_distance[i] for i, index in enumerate(front)}
+                    sorted_front = sorted((value, key) for key, value in distance_to_model.items())
+                    sorted_front.reverse()
+                    for item in sorted_front:
+                        new_generation.append(next(model for model in generation if model.model_id == item[1]))
 
-        for i in range(nwinners):
-            for j in range(nwinners - 1):
-                winner_models.append(winner_models[i].get_copy())
-            if len(winner_models) == gen_num:
+                        if len(new_generation) == winners_num:
+                            break
+                    break
+
+        for i in range(winners_num):
+            new_generation.append(new_generation[i].get_copy())
+            if len(new_generation) == gen_num:
                 break
 
-        for i, model in enumerate(winner_models):
-            modification = random.choice(MODIFICATION_LIST)
-            print(modification.__name__)
-            modification(model)
+        for model in new_generation:
+            model.random_mutation()
 
-        generation = winner_models
+        generation = new_generation
 
-    return generation[:nwinners]
+    return generation[0]
 
 
 def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
@@ -91,7 +95,7 @@ def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
     return generation
 
 
-def _sort_models_by_error(x_train, y_train, generation):
+def _get_models_avg_nodes_count(x_train, y_train, generation):
     """
     Evaluate and sort models by error to increase
     :param x_train: input values -> 2d np.ndarray
@@ -105,119 +109,92 @@ def _sort_models_by_error(x_train, y_train, generation):
     def y_scaled(y):
         return y * y_ptp + y_min
 
-    model_result = {}
+    model_result = []
     for model in generation:
-        errors_sum = 0
+        errors_avg = 0
         for i, value in enumerate(EVAL_WEIGHTS):
             model.set_weight(value)
             eval_result = model.evaluate_model(x_scaled)
             error = mean_squared_error(y_train, y_scaled(eval_result))
-            errors_sum += error
-        model_result[model.model_id] = errors_sum
+            errors_avg += error
+        model_result.append((model.model_id, errors_avg / len(EVAL_WEIGHTS), model.nodes_count))
 
-    return sorted((value, key) for (key, value) in model_result.items())
-
-
-def _change_activation_function(model):
-    """
-    Change сurrent activation function of random node in model
-    :param model: WANN model -> WANNModel
-    """
-    nodes = model.get_all_nodes()
-    node = random.choice(nodes)
-    node.activation = get_random_function()
+    return model_result
 
 
-def _add_connection(model):
-    """
-    Add connection between random nodes
-    :param model: WANN model -> WANNModel
-    """
-    all_nodes = model.get_all_nodes(with_input=True)
-    first_rand_node = random.choice(all_nodes)
+def _non_dominated_sorting(models):
+    S = [[] for i in range(0, len(models))]
+    front = [[]]
+    n = [0 for i in range(0, len(models))]
+    rank = [0 for i in range(0, len(models))]
 
-    candidate_layers = [layer for layer in model.layers if layer.layer_id != first_rand_node.layer_id]
-    second_rand_node = random.choice([node for layer in candidate_layers for node in layer.nodes])
-
-    layer_id_to_node_map = {
-        first_rand_node.layer_id: first_rand_node,
-        second_rand_node.layer_id: second_rand_node
-    }
-
-    first_layer_id, second_layer_id = _get_random_layer_order(first_rand_node.layer_id, second_rand_node.layer_id,
-                                                              model)
-
-    prev_node = layer_id_to_node_map[first_layer_id]
-    node = layer_id_to_node_map[second_layer_id]
-
-    connection = Connection(prev_node, model.weight)
-    if node.prev_connections.is_valid_connection(connection):
-        node.prev_connections.add_connection(connection)
-
-
-def _get_random_layer_order(layer_id1, layer_id2, model):
-    """
-    Get order of two random layers
-    :param layer_id1: first layer guid -> str
-    :param layer_id2: second layer guid -> str
-    :param model: WANN model -> WANNModel
-    :return: List[str]
-    """
-    ordered_layers_id = []
-    for layer in model.layers:
-        if layer.layer_id == layer_id1 or layer.layer_id == layer_id2:
-            ordered_layers_id.append(layer.layer_id)
-    return ordered_layers_id
+    for p in range(0, len(models)):
+        S[p] = []
+        n[p] = 0
+        for q in range(0, len(models)):
+            if (models[p][1] <= models[q][1] and models[p][2] <= models[q][2]) and (
+                    models[p][1] < models[q][1] or models[p][2] < models[q][2]):
+                if q not in S[p]:
+                    S[p].append(q)
+            elif (models[q][1] <= models[p][1] and models[q][2] <= models[p][2]) and (
+                    models[q][1] < models[p][1] or models[q][2] < models[p][2]):
+                n[p] = n[p] + 1
+        if n[p] == 0:
+            rank[p] = 0
+            if p not in front[0]:
+                front[0].append(p)
+    i = 0
+    while front[i]:
+        Q = []
+        for p in front[i]:
+            for q in S[p]:
+                n[q] = n[q] - 1
+                if n[q] == 0:
+                    rank[q] = i + 1
+                    if q not in Q:
+                        Q.append(q)
+        i = i + 1
+        front.append(Q)
+    del front[len(front) - 1]
+    return front
 
 
-def _add_new_node(model):
-    """
-    Add new node between two random nodes
-    :param model: WANN model -> WANNModel
-    """
-    all_nodes = model.get_all_nodes(with_input=True)
-    first_rand_node = random.choice(all_nodes)
-
-    candidate_layers = [layer for layer in model.layers if layer.layer_id != first_rand_node.layer_id]
-    second_rand_node = random.choice([node for layer in candidate_layers for node in layer.nodes])
-
-    layer_id_to_node_map = {
-        first_rand_node.layer_id: first_rand_node,
-        second_rand_node.layer_id: second_rand_node
-    }
-
-    first_layer_id, second_layer_id = _get_random_layer_order(first_rand_node.layer_id, second_rand_node.layer_id,
-                                                              model)
-
-    prev_node = layer_id_to_node_map[first_layer_id]
-    node = layer_id_to_node_map[second_layer_id]
-
-    first_layer_index = next(i for i, layer in enumerate(model.layers) if layer.layer_id == prev_node.layer_id)
-    second_layer_index = next(i for i, layer in enumerate(model.layers) if layer.layer_id == node.layer_id)
-    layers_between = model.layers[first_layer_index:second_layer_index]
-
-    if len(layers_between) == 1:
-        model.layers.insert(first_layer_index + 1, HiddenLayer(str(uuid.uuid4())))
-        new_layer = model.layers[first_layer_index + 1]
-
-        new_node = HiddenNode(str(uuid.uuid4()), new_layer.layer_id, get_random_function())
-        new_node.prev_connections.add_connection(Connection(prev_node, model.weight))
-
-        new_layer.add_node(new_node)
-
-        node.prev_connections.update_connection(prev_node, new_node)
-    else:
-        exist_layer = model.layers[first_layer_index + 1]
-
-        new_node = HiddenNode(str(uuid.uuid4()), exist_layer.layer_id, get_random_function())
-        new_node.prev_connections.add_connection(Connection(prev_node, model.weight))
-
-        exist_layer.add_node(new_node)
-
-        node.prev_connections.update_connection(prev_node, new_node)
+def _index_locator(a, arr):
+    for i in range(0, len(arr)):
+        if arr[i] == a:
+            return i
+    return -1
 
 
-# List of model modifications
-MODIFICATION_LIST = [_change_activation_function,
-                     _add_connection,
-                     _add_new_node]
+def _sort_by_values(list1, values):
+    sorted_list = []
+    while len(sorted_list) != len(list1):
+        if _index_locator(np.min(values), values) in list1:
+            sorted_list.append(_index_locator(np.min(values), values))
+        values[_index_locator(np.min(values), values)] = 99999999
+    return sorted_list
+
+
+def _crowding_distance(models, front):
+    distance = [0 for i in range(0, len(front))]
+    values1 = [model[1] for model in models]
+    values2 = [model[2] for model in models]
+
+    sorted1 = _sort_by_values(front, values1)
+    sorted2 = _sort_by_values(front, values2)
+
+    distance[0] = 99999999
+    distance[len(front) - 1] = 99999999
+    for k in range(1, len(front) - 1):
+        try:
+            distance[k] = distance[k] + (values1[sorted1[k + 1]] - values2[sorted1[k - 1]]) / (
+                    max(values1) - min(values1))
+        except ZeroDivisionError:
+            distance[k] = 99999999
+    for k in range(1, len(front) - 1):
+        try:
+            distance[k] = distance[k] + (values1[sorted2[k + 1]] - values2[sorted2[k - 1]]) / (
+                    max(values2) - min(values2))
+        except ZeroDivisionError:
+            distance[k] = 99999999
+    return distance
