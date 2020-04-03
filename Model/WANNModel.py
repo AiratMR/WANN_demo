@@ -1,6 +1,8 @@
 import random
 import uuid
 import numpy as np
+import pickle
+from pathlib import Path
 from copy import deepcopy
 from scipy.optimize import dual_annealing
 from sklearn.metrics import mean_squared_error
@@ -167,6 +169,29 @@ class WANNModel:
         print("""Random mutation - {0};
                  connections count = {1}
                  nodes count = {2}""".format(mutation.__name__, self.connections_count, self.nodes_count))
+
+    def save(self, filename):
+        """
+        Save model object to file
+        :param  filename: name of file to save
+        """
+        with(open(filename + ".pkl", 'wb')) as file:
+            pickle.dump(self, file, pickle.HIGHEST_PROTOCOL)
+
+    @staticmethod
+    def load(filepath):
+        """
+        Load model from file
+        :param filepath: path to file
+        :return: WANNModel
+        """
+        path = Path(filepath)
+
+        if path.exists():
+            with(open(path, 'rb')) as file:
+                return pickle.load(file)
+        else:
+            raise FileExistsError("File {0} does not exist".format(filepath))
 
     def _change_activation_function(self):
         """
