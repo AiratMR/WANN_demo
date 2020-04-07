@@ -1,29 +1,24 @@
 import math
 import random
 import numpy as np
-from sklearn.metrics import mean_squared_error
+import logging
+from sklearn.metrics import mean_squared_error, log_loss
+from joblib import Parallel, delayed
+import multiprocessing as mp
 
 from typing import List
 from Model.WANNModel import WANNModel
 
 EVAL_WEIGHTS = [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0]
-
-"""
-ToDo - реализовать ранжирование по: 1) В 80% по средней ошибке и количеству нейронов (связей);
-                                    2) В 20% по средней ошибке и ошибке одного лучшего веса;
-Сначала формируем ранги по алгоритму "Недоминируемой сортировки";
-Затем формируем из рангов кандидатов на новое поколение;
-Если n-ый ранг не польностью входит в новое поколение, то сортируем его критерию разреженности, которая
-строится на основе вычисленного Манхетенского расстояния для каждого элемента до его левого и правого соседа
-(расстояние для крайних элементов считать бесконечным)
-"""
+num_cores = mp.cpu_count()
 
 
 def generate_wann_model(x_train, y_train,
                         tol: float = 0.1,
                         niter: int = 50,
                         gen_num: int = 9,
-                        sort_type='all') -> WANNModel:
+                        sort_type: str = 'all',
+                        metric: str = "mse") -> WANNModel:
     """
     Generate the WANN model by train data
     :param x_train: input train values -> 2d np.ndarray
@@ -32,10 +27,14 @@ def generate_wann_model(x_train, y_train,
     :param niter: number of iterations -> int
     :param gen_num: number of models in generation -> int
     :param sort_type: type of sorting of generation
+    :param metric: metric function type
     :return: winner -> WANNModel
     """
 
     assert x_train.shape[0] == y_train.shape[0], "'x_train' shape not equal of 'y_train shape"
+    assert 0 < tol < 1, "'tol' must be greater than 0 and less than 1"
+    assert niter > 0, "'niter' must be greater than 0"
+    assert gen_num > 0, "'gen_num' must be greater than 0"
 
     sort_types = {
         "all": _get_models_avg_nodes_and_conn_count,
@@ -43,54 +42,105 @@ def generate_wann_model(x_train, y_train,
         "conn": _get_models_avg_conn_count
     }
 
+    metrics = {
+        "mse": mean_squared_error,
+        "log-loss": log_loss
+    }
+
+    # init first generation
     winners_num = math.ceil(gen_num / 2)
     generation = _init_first_generation({'x': x_train[0], 'y': y_train[0]}, gen_num)
+
+    # init sorter and metric
     sorter = sort_types[sort_type]
+    loss_func = metrics[metric]
+
+    # init number of elite models
+    elite_models_number = math.ceil(gen_num * 0.1)
+    elite_models = []
+
+    # init best model
+    best_model = None
 
     for iteration in range(niter):
         rand = random.random()
         is_min_sort = False if rand > 0.8 else True
-        models = sorter(x_train, y_train, generation) if not is_min_sort else _get_models_avg_min(x_train,
-                                                                                                  y_train,
-                                                                                                  generation)
-        fronts = _non_dominated_sorting(models)
+        models = Parallel(n_jobs=num_cores)(delayed(_get_models_avg_min)(x_train, y_train, loss_func, model)
+                                            for model in generation) \
+            if is_min_sort else \
+            Parallel(n_jobs=num_cores)(delayed(sorter)(x_train, y_train, loss_func, model)
+                                       for model in generation)
 
-        print("Iteration #{0}:".format(iteration))
+        # non-dominated sorting of generation
+        fronts = _non_dominated_sorting(models)
+        log = "Iteration #{0}:".format(iteration)
+        logging.info(log)
+        print(log)
         for front in fronts:
             for i in front:
-                print("     Model #{0} - avg_mean squared error {1}".format(models[i][0], models[i][1]))
+                log = "     Model #{0} - avg_mean squared error {1}".format(models[i][0], models[i][1])
+                logging.info(log)
+                print(log)
                 if models[i][1] < tol:
                     return next(winner for winner in generation if winner.model_id == models[i][0])
 
-        new_generation = []
-        while len(new_generation) != winners_num:
+        # selection of new candidates to new generation
+        best_candidates = []
+        while len(best_candidates) != winners_num:
             for front in fronts:
-                if len(new_generation) + len(front) < winners_num:
+                if len(best_candidates) + len(front) < winners_num:
                     for i in front:
-                        new_generation.append(next(model for model in generation if model.model_id == models[i][0]))
+                        best_candidates.append(models[i])
                 else:
                     crowding_distance = _crowding_distance(models, front)
-                    distance_to_model = {models[index][0]: crowding_distance[i] for i, index in enumerate(front)}
-                    sorted_front = sorted((value, key) for key, value in distance_to_model.items())
-                    sorted_front.reverse()
+                    distance_to_model = [(crowding_distance[i], models[index]) for i, index in enumerate(front)]
+                    sorted_front = sorted(distance_to_model, key=lambda it: (it[1], it[0]), reverse=True)
                     for item in sorted_front:
-                        new_generation.append(next(model for model in generation if model.model_id == item[1]))
+                        best_candidates.append(item[1])
 
-                        if len(new_generation) == winners_num:
+                        if len(best_candidates) == winners_num:
                             break
                     break
 
-        for i in range(winners_num):
-            new_generation.append(new_generation[i].get_copy())
-            if len(new_generation) == gen_num:
-                break
+        # init and modification of elite models
+        if iteration == 0:
+            for i in range(elite_models_number):
+                elite_models.append((next(model.get_copy() for model in generation if
+                                          model.model_id == best_candidates[i][0]), best_candidates[i][1]))
+        else:
+            for i in range(elite_models_number):
+                elite_errors = {elite_model[1] for elite_model in elite_models}
+                if best_candidates[i][1] not in elite_errors and \
+                        best_candidates[i][1] < elite_models[i][1]:
+                    elite_models[i] = (next(model.get_copy() for model in generation if
+                                            model.model_id == best_candidates[i][0]), best_candidates[i][1])
+
+        # exit if iteration is last
+        if iteration == niter - 1:
+            winners = [model[0] for model in best_candidates]
+            winners = [next(model for model in generation if model.model_id == candidate) for candidate in
+                       winners]
+            best_model = _get_winner(x_train, y_train, loss_func, winners)
+            break
+
+        # binary tournament selection with elite selection
+        new_generation = []
+        for elite in elite_models:
+            new_generation.append(elite[0])
+        while len(new_generation) != gen_num:
+            candidates = np.random.choice(range(len(best_candidates)), 2)
+            candidate1 = best_candidates[candidates[0]]
+            candidate2 = best_candidates[candidates[1]]
+            winner = candidate1 if candidate1[1] < candidate2[1] else candidate2
+            if winner[1] < 1.0:
+                new_generation.append(next(model.get_copy() for model in generation if model.model_id == winner[0]))
 
         for model in new_generation:
             model.random_mutation()
 
         generation = new_generation
 
-    return generation[0]
+    return best_model
 
 
 def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
@@ -110,117 +160,109 @@ def _init_first_generation(train_data: dict, gen_num: int) -> List[WANNModel]:
     return generation
 
 
-def _get_models_avg_nodes_count(x_train, y_train, generation):
+def _get_models_avg_nodes_count(x_train, y_train, metric, model):
     """
     Evaluate and sort models by error and nodes count to increase
     :param x_train: input values -> 2d np.ndarray
     :param y_train: output values -> 2d np.ndarray
-    :param generation: list with first generation of models -> List[WANNModel]
+    :param metric: metric function
+    :param model: WANN model -> WANNModel
     :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
     """
-    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-    y_min, y_ptp = np.min(y_train), np.ptp(y_train)
 
-    def y_scaled(y):
-        return y * y_ptp + y_min
+    errors_avg = 0
+    for i, value in enumerate(EVAL_WEIGHTS):
+        model.set_weight(value)
+        eval_result = model.evaluate_model(x_train)
+        error = metric(y_train, eval_result)
+        errors_avg += error
 
-    model_result = []
-    for model in generation:
-        errors_avg = 0
-        for i, value in enumerate(EVAL_WEIGHTS):
-            model.set_weight(value)
-            eval_result = model.evaluate_model(x_scaled)
-            error = mean_squared_error(y_train, y_scaled(eval_result))
-            errors_avg += error
-        model_result.append((model.model_id, errors_avg / len(EVAL_WEIGHTS), model.nodes_count))
-
-    return model_result
+    return model.model_id, errors_avg / len(EVAL_WEIGHTS), model.nodes_count
 
 
-def _get_models_avg_conn_count(x_train, y_train, generation):
+def _get_models_avg_conn_count(x_train, y_train, metric, model):
     """
     Evaluate and sort models by error and connections count to increase
     :param x_train: input values -> 2d np.ndarray
     :param y_train: output values -> 2d np.ndarray
-    :param generation: list with first generation of models -> List[WANNModel]
+    :param metric: metric function
+    :param model: WANN model -> WANNModel
     :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
     """
-    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-    y_min, y_ptp = np.min(y_train), np.ptp(y_train)
+    errors_avg = 0
+    for i, value in enumerate(EVAL_WEIGHTS):
+        model.set_weight(value)
+        eval_result = model.evaluate_model(x_train)
+        error = metric(y_train, eval_result)
+        errors_avg += error
 
-    def y_scaled(y):
-        return y * y_ptp + y_min
-
-    model_result = []
-    for model in generation:
-        errors_avg = 0
-        for i, value in enumerate(EVAL_WEIGHTS):
-            model.set_weight(value)
-            eval_result = model.evaluate_model(x_scaled)
-            error = mean_squared_error(y_train, y_scaled(eval_result))
-            errors_avg += error
-        model_result.append((model.model_id, errors_avg / len(EVAL_WEIGHTS), model.connections_count))
-
-    return model_result
+    return model.model_id, errors_avg / len(EVAL_WEIGHTS), model.connections_count
 
 
-def _get_models_avg_min(x_train, y_train, generation):
+def _get_models_avg_min(x_train, y_train, metric, model):
     """
     Evaluate and sort models by average error and best error to increase
     :param x_train: input values -> 2d np.ndarray
     :param y_train: output values -> 2d np.ndarray
-    :param generation: list with first generation of models -> List[WANNModel]
+    :param metric: metric function
+    :param model: WANN model -> WANNModel
     :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
     """
-    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-    y_min, y_ptp = np.min(y_train), np.ptp(y_train)
 
-    def y_scaled(y):
-        return y * y_ptp + y_min
+    errors_avg = 0
+    best_min = 999999999
+    for i, value in enumerate(EVAL_WEIGHTS):
+        model.set_weight(value)
+        eval_result = model.evaluate_model(x_train)
+        error = metric(y_train, eval_result)
+        if error < best_min:
+            best_min = error
+        errors_avg += error
 
-    model_result = []
-    for model in generation:
-        errors_avg = 0
-        best_min = 999999999
-        for i, value in enumerate(EVAL_WEIGHTS):
-            model.set_weight(value)
-            eval_result = model.evaluate_model(x_scaled)
-            error = mean_squared_error(y_train, y_scaled(eval_result))
-            temp_min = np.min(error)
-            if np.min(error) < best_min:
-                best_min = temp_min
-            errors_avg += error
-        model_result.append((model.model_id, errors_avg / len(EVAL_WEIGHTS), best_min))
-
-    return model_result
+    return model.model_id, errors_avg / len(EVAL_WEIGHTS), best_min
 
 
-def _get_models_avg_nodes_and_conn_count(x_train, y_train, generation):
+def _get_models_avg_nodes_and_conn_count(x_train, y_train, metric, model):
     """
     Evaluate and sort models by error, nodes and connections count to increase
     :param x_train: input values -> 2d np.ndarray
     :param y_train: output values -> 2d np.ndarray
+    :param metric: metric function
+    :param model: WANN model -> WANNModel
+    :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
+    """
+    errors_avg = 0
+    for i, value in enumerate(EVAL_WEIGHTS):
+        model.set_weight(value)
+        eval_result = model.evaluate_model(x_train)
+        error = metric(y_train, eval_result)
+        errors_avg += error
+
+    return model.model_id, errors_avg / len(EVAL_WEIGHTS), model.nodes_count, model.connections_count
+
+
+def _get_winner(x_train, y_train, metric, generation):
+    """
+    Get best model from generation
+    :param x_train: input values -> 2d np.ndarray
+    :param y_train: output values -> 2d np.ndarray
+    :param metric: metric function
     :param generation: list with first generation of models -> List[WANNModel]
     :return: list of sorted models by error -> List[Tuple(float, WANNModel)]
     """
-    x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-    y_min, y_ptp = np.min(y_train), np.ptp(y_train)
-
-    def y_scaled(y):
-        return y * y_ptp + y_min
-
-    model_result = []
+    best_model = generation[0]
+    best_min = 999999999
     for model in generation:
-        errors_avg = 0
         for i, value in enumerate(EVAL_WEIGHTS):
             model.set_weight(value)
-            eval_result = model.evaluate_model(x_scaled)
-            error = mean_squared_error(y_train, y_scaled(eval_result))
-            errors_avg += error
-        model_result.append((model.model_id, errors_avg / len(EVAL_WEIGHTS), model.nodes_count,
-                             model.connections_count))
+            eval_result = model.evaluate_model(x_train)
+            error = metric(y_train, eval_result)
+            if error < best_min:
+                best_min = error
+                best_model = model.get_copy()
+                best_model.set_weight(value)
 
-    return model_result
+    return best_model
 
 
 def _non_dominated_sorting(models):
@@ -272,19 +314,13 @@ def _non_dominated_sorting(models):
     return front
 
 
-def _index_locator(a, arr):
-    for i in range(0, len(arr)):
-        if arr[i] == a:
-            return i
-    return -1
-
-
 def _sort_by_values(list1, values):
     sorted_list = []
     while len(sorted_list) != len(list1):
-        if _index_locator(np.min(values), values) in list1:
-            sorted_list.append(_index_locator(np.min(values), values))
-        values[_index_locator(np.min(values), values)] = 99999999
+        min_index = np.argwhere(values == np.min(values)).flatten()[0]
+        if min_index in list1:
+            sorted_list.append(min_index)
+        values[min_index] = 99999999
     return sorted_list
 
 

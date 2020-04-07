@@ -2,9 +2,10 @@ import random
 import uuid
 import numpy as np
 import pickle
+import logging
 from pathlib import Path
 from copy import deepcopy
-from scipy.optimize import dual_annealing
+from scipy.optimize import minimize, differential_evolution, dual_annealing
 from sklearn.metrics import mean_squared_error
 
 from .Layers import InputLayer, HiddenLayer, OutputLayer
@@ -95,21 +96,7 @@ class WANNModel:
                 # create one result
                 if isinstance(layer, OutputLayer):
                     result.append([res.value for res in layer.nodes])
-
         return np.array(result)
-
-    def set_weight(self, value):
-        """
-        Set new value of weight to all nodes in model
-        :param value: new value -> float
-        """
-        self.weight = value
-
-        for layer in self.layers:
-            for node in layer.nodes:
-                if not isinstance(layer, InputLayer):
-                    for conn in node.prev_connections.connections:
-                        conn.weight = value
 
     def get_all_nodes(self, with_input: bool = False):
         """
@@ -120,6 +107,17 @@ class WANNModel:
         if with_input:
             return self.nodes
         return [node for node in self.nodes if not isinstance(node, InputNode)]
+
+    def set_weight(self, value):
+        """
+        Set new value of weight to all nodes in model
+        :param value: new value -> float
+        """
+        self.weight = value
+
+        for node in self.get_all_nodes():
+            for conn in node.prev_connections.connections:
+                conn.weight = value
 
     def get_copy(self):
         """
@@ -148,9 +146,11 @@ class WANNModel:
             eval_result = self.evaluate_model(x_scaled)
             print("weight={0}".format(self.weight))
             print(y_scaled(eval_result))
-            return mean_squared_error(y_train, y_scaled(eval_result))
+            result = mean_squared_error(y_train, y_scaled(eval_result))
+            print("Error = {0}".format(result))
+            return result
 
-        res = dual_annealing(obj_func, np.array([(-2, 2)]))
+        res = differential_evolution(obj_func, bounds=np.array([(self.weight - 2, self.weight + 2)]), tol=0.05)
         self.weight = res.x[0]
 
     def random_mutation(self):
@@ -166,9 +166,11 @@ class WANNModel:
 
         mutation = random.choice(mutation_list)
         mutation()
-        print("""Random mutation - {0};
+        log = """Random mutation - {0};
                  connections count = {1}
-                 nodes count = {2}""".format(mutation.__name__, self.connections_count, self.nodes_count))
+                 nodes count = {2}""".format(mutation.__name__, self.connections_count, self.nodes_count)
+        logging.info(log)
+        print(log)
 
     def save(self, filename):
         """

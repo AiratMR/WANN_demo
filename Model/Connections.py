@@ -46,6 +46,7 @@ class Connections:
         Check for a connection in the connection list
         :param connection: verifiable connection -> Connection
         """
-        if connection in self.connections:
+        conn_nodes = [conn.node.node_id for conn in self.connections]
+        if connection.node.node_id in conn_nodes:
             return False
         return True

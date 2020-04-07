@@ -1,1 +1,4 @@
 /.idea/
+/Model/__pycache__/
+/ModelGenerator/__pycache__/
+__pycache__
