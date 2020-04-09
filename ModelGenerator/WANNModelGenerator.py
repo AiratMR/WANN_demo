@@ -64,7 +64,7 @@ def generate_wann_model(x_train, y_train,
 
     for iteration in range(niter):
         rand = random.random()
-        is_min_sort = False if rand > 0.8 else True
+        is_min_sort = True if rand > 0.8 else False
         models = Parallel(n_jobs=num_cores)(delayed(_get_models_avg_min)(x_train, y_train, loss_func, model)
                                             for model in generation) \
             if is_min_sort else \

@@ -36,7 +36,7 @@ def cosine(x):
 
 
 def gaussian(x):
-    return np.exp(-(x * x) / 2)
+    return np.exp(-(x * x))
 
 
 def absolute(x):
