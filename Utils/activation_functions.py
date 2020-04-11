@@ -43,6 +43,10 @@ def absolute(x):
     return np.abs(x)
 
 
+def swish(x):
+    return x / (1 + np.exp(-x))
+
+
 FUNCTIONS = {
     'linear': linear,
     'inverse': inverse,
@@ -53,11 +57,13 @@ FUNCTIONS = {
     'sine': sine,
     'cosine': cosine,
     'gaussian': gaussian,
-    'absolute': absolute
+    'absolute': absolute,
+    'swish': swish
 }
 
 
 def get_random_function():
     _, function = random.choice(list(FUNCTIONS.items()))
     return function
+
 

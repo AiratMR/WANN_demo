@@ -64,7 +64,7 @@ def generate_wann_model(x_train, y_train,
 
     for iteration in range(niter):
         rand = random.random()
-        is_min_sort = True if rand > 0.8 else False
+        is_min_sort = True if rand < 0.8 else False
         models = Parallel(n_jobs=num_cores)(delayed(_get_models_avg_min)(x_train, y_train, loss_func, model)
                                             for model in generation) \
             if is_min_sort else \
@@ -86,21 +86,21 @@ def generate_wann_model(x_train, y_train,
 
         # selection of new candidates to new generation
         best_candidates = []
-        while len(best_candidates) != winners_num:
-            for front in fronts:
-                if len(best_candidates) + len(front) < winners_num:
-                    for i in front:
-                        best_candidates.append(models[i])
-                else:
-                    crowding_distance = _crowding_distance(models, front)
-                    distance_to_model = [(crowding_distance[i], models[index]) for i, index in enumerate(front)]
-                    sorted_front = sorted(distance_to_model, key=lambda it: (it[1], it[0]), reverse=True)
-                    for item in sorted_front:
-                        best_candidates.append(item[1])
+        for front in fronts:
+            if len(best_candidates) + len(front) < winners_num:
+                for i in front:
+                    best_candidates.append(models[i])
+            else:
+                crowding_distance = _crowding_distance(models, front)
+                distance_to_model = [(crowding_distance[i], models[index]) for i, index in enumerate(front)]
+                sorted_front = sorted(distance_to_model, key=lambda it: (it[1], it[0]), reverse=True)
+                for item in sorted_front:
+                    best_candidates.append(item[1])
 
-                        if len(best_candidates) == winners_num:
-                            break
-                    break
+                    if len(best_candidates) == winners_num:
+                        break
+            if len(best_candidates) >= winners_num:
+                break
 
         # init and modification of elite models
         if iteration == 0:

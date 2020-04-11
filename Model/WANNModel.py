@@ -161,7 +161,8 @@ class WANNModel:
         mutation_list = [
             self._change_activation_function,
             self._add_connection,
-            self._add_new_node
+            self._add_new_node,
+            self._update_connection
         ]
 
         mutation = random.choice(mutation_list)
@@ -241,6 +242,31 @@ class WANNModel:
         if node.prev_connections.is_valid_connection(connection):
             node.prev_connections.add_connection(connection)
             self.connections_count += 1
+
+    def _update_connection(self):
+        """
+        Change exist connection
+        """
+        if self.connections_count <= 1:
+            return
+
+        all_nodes = self.get_all_nodes()
+        node = random.choice(all_nodes)
+        rand_connection = random.choice([connection for connection in node.prev_connections.connections])
+        node.prev_connections.delete_connection(rand_connection)
+
+        candidate_layers = []
+        for layer in self.layers:
+            if layer.layer_id == node.layer_id:
+                break
+            candidate_layers.append(layer)
+        prev_node = random.choice([node for layer in candidate_layers for node in layer.nodes])
+
+        connection = Connection(prev_node, self.weight)
+        if node.prev_connections.is_valid_connection(connection):
+            node.prev_connections.add_connection(connection)
+        else:
+            node.prev_connections.add_connection(rand_connection)
 
     def _add_new_node(self):
         """

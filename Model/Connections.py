@@ -28,6 +28,13 @@ class Connections:
         """
         self.connections.append(connection)
 
+    def delete_connection(self, connection):
+        """
+        Delete connection by node
+        :param connection: connection for delete
+        """
+        self.connections.remove(connection)
+
     def update_connection(self, old_node, new_node):
         """
         Update the node of connection
