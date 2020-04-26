@@ -18,6 +18,7 @@ def generate_wann_model(x_train, y_train,
                         niter: int = 50,
                         gen_num: int = 9,
                         sort_type: str = 'all',
+                        selection: str = 'tournament',
                         metric: str = "mse") -> WANNModel:
     """
     Generate the WANN model by train data
@@ -26,7 +27,8 @@ def generate_wann_model(x_train, y_train,
     :param tol: model accuracy -> float
     :param niter: number of iterations -> int
     :param gen_num: number of models in generation -> int
-    :param sort_type: type of sorting of generation
+    :param sort_type: type of sorting of generation ('all', 'conn', 'nodes')
+    :param selection: type of selection ('none', 'tournament', 'elite-tournament')
     :param metric: metric function type
     :return: winner -> WANNModel
     """
@@ -102,19 +104,6 @@ def generate_wann_model(x_train, y_train,
             if len(best_candidates) >= winners_num:
                 break
 
-        # init and modification of elite models
-        if iteration == 0:
-            for i in range(elite_models_number):
-                elite_models.append((next(model.get_copy() for model in generation if
-                                          model.model_id == best_candidates[i][0]), best_candidates[i][1]))
-        else:
-            for i in range(elite_models_number):
-                elite_errors = {elite_model[1] for elite_model in elite_models}
-                if best_candidates[i][1] not in elite_errors and \
-                        best_candidates[i][1] < elite_models[i][1]:
-                    elite_models[i] = (next(model.get_copy() for model in generation if
-                                            model.model_id == best_candidates[i][0]), best_candidates[i][1])
-
         # exit if iteration is last
         if iteration == niter - 1:
             winners = [model[0] for model in best_candidates]
@@ -123,17 +112,50 @@ def generate_wann_model(x_train, y_train,
             best_model = _get_winner(x_train, y_train, loss_func, winners)
             break
 
-        # binary tournament selection with elite selection
+        # init and modification of elite models
+        if selection == 'elite-tournament':
+            if iteration == 0:
+                for i in range(elite_models_number):
+                    elite_models.append((next(model.get_copy() for model in generation if
+                                              model.model_id == best_candidates[i][0]), best_candidates[i][1]))
+            else:
+                for i in range(elite_models_number):
+                    elite_errors = {elite_model[1] for elite_model in elite_models}
+                    if best_candidates[i][1] not in elite_errors and \
+                            best_candidates[i][1] < elite_models[i][1]:
+                        elite_models[i] = (next(model.get_copy() for model in generation if
+                                                model.model_id == best_candidates[i][0]), best_candidates[i][1])
+
         new_generation = []
-        for elite in elite_models:
-            new_generation.append(elite[0])
-        while len(new_generation) != gen_num:
-            candidates = np.random.choice(range(len(best_candidates)), 2)
-            candidate1 = best_candidates[candidates[0]]
-            candidate2 = best_candidates[candidates[1]]
-            winner = candidate1 if candidate1[1] < candidate2[1] else candidate2
-            if winner[1] < 1.0:
+
+        # binary tournament selection with elite selection
+        if selection == 'elite-tournament':
+            for elite in elite_models:
+                new_generation.append(elite[0])
+            while len(new_generation) != gen_num:
+                candidates = np.random.choice(range(len(best_candidates)), 2)
+                candidate1 = best_candidates[candidates[0]]
+                candidate2 = best_candidates[candidates[1]]
+                winner = candidate1 if candidate1[1] < candidate2[1] else candidate2
                 new_generation.append(next(model.get_copy() for model in generation if model.model_id == winner[0]))
+
+        # binary tournament selection
+        elif selection == "tournament":
+            while len(new_generation) != gen_num:
+                candidates = np.random.choice(range(len(best_candidates)), 2)
+                candidate1 = best_candidates[candidates[0]]
+                candidate2 = best_candidates[candidates[1]]
+                winner = candidate1 if candidate1[1] < candidate2[1] else candidate2
+                new_generation.append(next(model.get_copy() for model in generation if model.model_id == winner[0]))
+
+        # Just Pareto sorting
+        else:
+            while len(new_generation) != gen_num:
+                for candidate in best_candidates:
+                    new_generation.append(next(model.get_copy() for model in generation
+                                               if model.model_id == candidate[0]))
+                    if len(new_generation) == gen_num:
+                        break
 
         for model in new_generation:
             model.random_mutation()

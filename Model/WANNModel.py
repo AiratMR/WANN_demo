@@ -134,24 +134,29 @@ class WANNModel:
         :param x_train: input values
         :param y_train: output values
         """
-        x_scaled = (x_train - np.min(x_train)) / np.ptp(x_train)
-        y_min, y_ptp = np.min(y_train), np.ptp(y_train)
-
-        def y_scaled(y):
-            return y * y_ptp + y_min
-
         def obj_func(x):
             self.weight = x[0]
             self.set_weight(x[0])
-            eval_result = self.evaluate_model(x_scaled)
+            eval_result = self.evaluate_model(x_train)
             print("weight={0}".format(self.weight))
-            print(y_scaled(eval_result))
-            result = mean_squared_error(y_train, y_scaled(eval_result))
+            print(eval_result)
+            result = mean_squared_error(y_train, eval_result)
             print("Error = {0}".format(result))
             return result
 
         res = differential_evolution(obj_func, bounds=np.array([(self.weight - 2, self.weight + 2)]), tol=0.05)
         self.weight = res.x[0]
+
+    def validate_model(self, x_train, y_train):
+        """
+        Validate model
+        :param x_train: input values
+        :param y_train: output values
+        """
+        eval_result = self.evaluate_model(x_train)
+        print(eval_result)
+        result = mean_squared_error(y_train, eval_result)
+        print("Error = {0}".format(result))
 
     def random_mutation(self):
         """
